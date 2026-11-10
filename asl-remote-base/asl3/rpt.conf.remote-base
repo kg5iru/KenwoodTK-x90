@@ -1,0 +1,65 @@
+; ---------------------------------------------------------------------------
+; AllStarLink 3 -- TK-x90 frequency-agile remote base
+;
+; Add this to /etc/asterisk/rpt.conf. Replace 1999 with your node number.
+; You can also put it in /etc/asterisk/custom/rpt/ if your rpt.conf
+; #tryincludes that directory.
+;
+; The remote base node is a separate node from your repeater/hotspot
+; node.  Users connect to it from their home node with *3<node> (or *2
+; for monitor) and then enter the remote-base DTMF commands below.
+; ---------------------------------------------------------------------------
+
+[nodes]
+; (append to your existing [nodes] stanza)
+1999 = radio@127.0.0.1/1999,NONE
+
+[1999](node-main)
+rxchannel = SimpleUSB/1999          ; URI attached to the TK-x90 interface board
+
+; --- remote base ---
+remote = kenwood                    ; app_rpt speaks the Kenwood VW/RBN/PC dialect
+ioport = /run/tkx90/asl-cat         ; pty published by tkx90-catd
+iospeed = 9600                      ; ignored by the pty, set for completeness
+functions = functions-remote        ; DTMF commands from the connected user
+link_functions = functions-remote
+phone_functions = functions-remote
+memory = memory-tkx90               ; channel memories (see below)
+split2m = 600                       ; default 2 m split, kHz
+split70cm = 5000                    ; default 70 cm split, kHz
+remote_inact_timeout = 900          ; drop idle users after 15 min
+remote_timeout = 3600               ; 1 hour session limit
+;authlevel = 1                      ; require remote,99 login before changes
+
+; Optional: refuse to transmit outside these limits once a user logs in
+;txlimits = txlimits-tkx90
+
+[functions-remote]
+0 = remote,1                        ; *0nn       recall memory nn
+1 = remote,2                        ; *1MMM*kkk*o  set freq + offset (o: 1=-, 2=simplex, 3=+)
+2 = remote,3                        ; *2nnn*n    set RX (and TX) PL tone, e.g. *2100*0
+3 = remote,4                        ; *3nnn*n    set TX PL tone
+40 = remote,100                     ; RX PL off
+41 = remote,101                     ; RX PL on
+42 = remote,102                     ; TX PL off
+43 = remote,103                     ; TX PL on
+44 = remote,104                     ; low power
+46 = remote,106                     ; high power
+51 = remote,5                       ; long status
+52 = remote,140                     ; short status
+;91 = remote,99,N0CALL,G            ; login (needed when authlevel is set)
+
+; Generated with:  tkx90-catd -c /etc/tkx90/tkx90.toml --asl-memory
+; Memory recall does not run app_rpt's band check (see README), so it
+; also reaches channels the DTMF frequency entry rejects, such as 144.39.
+[memory-tkx90]
+01 = 146.520,100.0,hs   ; 2M CALL
+02 = 146.940,100.0,h-t   ; RPT 146.94
+03 = 147.030,103.5,h+t   ; RPT 147.03
+04 = 147.030,103.5,h+tr   ; RPT 147.03 TSQ
+05 = 146.550,100.0,ls   ; SIMPLEX 146.55
+06 = 144.390,100.0,hs   ; APRS
+
+;[txlimits-tkx90]
+;E = 144.000-148.000
+;G = 144.000-148.000

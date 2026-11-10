@@ -1,0 +1,35 @@
+; ---------------------------------------------------------------------------
+; /etc/asterisk/simpleusb.conf -- TK-x90 remote base node
+; Append (or put in /etc/asterisk/custom/simpleusb/tkx90.conf).
+; Replace 1999 with your node number.  Use `asl-tune-usb` / the ASL3
+; menu to set the levels, which writes rxmixerset/txmixaset here.
+; ---------------------------------------------------------------------------
+[1999](node-main)
+devstr =                     ; empty = auto-detect (set it if you have >1 URI)
+eeprom = 0
+
+; Receive: DEO (DB25-19) is flat discriminator audio, so de-emphasise in
+; software and strip the CTCSS tone.  If you wire AFO (DB25-17, JP3=AFO)
+; instead, set deemphasis = no.
+rxboost = no
+deemphasis = yes
+plfilter = yes
+
+; COS: the interface board pulls the URI COS input LOW while the
+; channel is busy (Q8 open drain).
+carrierfrom = usbinvert
+
+; CTCSS decode is done by the radio (program it on the Remote Channel);
+; SQ already reflects it on most firmware, otherwise see README.
+ctcssfrom = no
+
+; Transmit: DI mode (DB25-13, R641 fitted) is flat -- pre-emphasise in
+; software.  If your radio is jumpered for MI (R640), set
+; preemphasis = no and fit the MI attenuator (see hardware/INTERFACE.md).
+invertptt = no               ; URI PTT output pulls low to transmit
+preemphasis = yes
+
+; Simplex remote base: ignore our own receiver for a moment after TX so
+; the radio's squelch tail does not re-key the link.
+txoffdelay = 10
+rxondelay = 2

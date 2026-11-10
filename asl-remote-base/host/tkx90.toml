@@ -1,0 +1,105 @@
+# /etc/tkx90/tkx90.toml -- tkx90-catd configuration
+#
+# The channel plan below must match the Remote Channels you programmed
+# into the radio with KPG-44D (see ../README.md, "Programming the radio").
+# The daemon can only select channels. It cannot change what a channel
+# transmits on.
+
+[daemon]
+# Pico controller (udev rule ../asl3/99-tkx90.rules creates the symlink).
+# Use "sim" for a dry run without hardware.
+controller = "/dev/tkx90ctl"
+poll_s = 0.25
+# Remote channel to select when the daemon starts / the controller
+# reconnects (0 = leave the radio on its front-panel channel).
+startup_channel = 1
+# Optional JSON status for Supermon/Allmon pages.
+status_file = "/run/tkx90/status.json"
+
+[app_rpt]
+enabled = true
+# rpt.conf:  ioport = /run/tkx90/asl-cat
+link = "/run/tkx90/asl-cat"
+group = "dialout"
+
+[hamlib]
+enabled = true
+listen = "127.0.0.1"   # use 0.0.0.0 to allow remote Hamlib clients
+port = 4532
+# Advertised to Hamlib clients.  TK-790 (148-174 MHz model, re-banded):
+rx_low_mhz = 136.0
+rx_high_mhz = 174.0
+tx_low_mhz = 144.0
+tx_high_mhz = 148.0
+# true = Hamlib may only read (frequency changes come from app_rpt only)
+read_only = false
+
+[match]
+# "best"   : RX frequency must match; shift/offset/tones pick among
+#            channels that share the RX frequency.
+# "strict" : app_rpt requests must also match TX frequency and TX tone.
+mode = "best"
+tolerance_hz = 500
+
+[rssi]
+# DB25-1 RSI in millivolts -> dBm.  The defaults are rough values read
+# off the curve in the service manual. Calibrate them with a signal
+# generator.
+cal = [[300, -120.0], [700, -110.0], [1100, -100.0], [1450, -90.0]]
+s9_dbm = -93.0
+
+# ---------------------------------------------------------------------------
+# Channel plan: one [[channel]] per Remote Channel (1..15).
+#   number      Remote Channel number programmed in KPG-44D
+#   rx_mhz      receive frequency
+#   tx_mhz      transmit frequency, or use shift ("+", "-", "simplex")
+#               together with offset_khz
+#   tx_tone     CTCSS encode in Hz (omit for none)
+#   rx_tone     CTCSS decode in Hz (omit for carrier squelch)
+#   power       "low" | "high"  (as programmed)
+#   memory      app_rpt memory slot for `remote,1` (default = number)
+# ---------------------------------------------------------------------------
+
+[[channel]]
+number = 1
+name = "2M CALL"
+rx_mhz = 146.520
+shift = "simplex"
+
+[[channel]]
+number = 2
+name = "RPT 146.94"
+rx_mhz = 146.940
+shift = "-"
+offset_khz = 600
+tx_tone = 100.0
+
+[[channel]]
+number = 3
+name = "RPT 147.03"
+rx_mhz = 147.030
+shift = "+"
+offset_khz = 600
+tx_tone = 103.5
+
+[[channel]]
+number = 4
+name = "RPT 147.03 TSQ"
+rx_mhz = 147.030
+shift = "+"
+offset_khz = 600
+tx_tone = 103.5
+rx_tone = 103.5
+
+[[channel]]
+number = 5
+name = "SIMPLEX 146.55"
+rx_mhz = 146.550
+shift = "simplex"
+power = "low"
+
+[[channel]]
+number = 6
+name = "APRS"
+rx_mhz = 144.390
+shift = "simplex"

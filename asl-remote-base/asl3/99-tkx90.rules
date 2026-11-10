@@ -1,0 +1,5 @@
+# /etc/udev/rules.d/99-tkx90.rules
+# Stable name for the Pico running the TKX90CTL MicroPython firmware.
+# MicroPython on RP2040 enumerates as 2e8a:0005.  If you run other Picos
+# on the same host, add ATTRS{serial}=="<your board's serial>".
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="0005", SYMLINK+="tkx90ctl", GROUP="dialout", MODE="0660"

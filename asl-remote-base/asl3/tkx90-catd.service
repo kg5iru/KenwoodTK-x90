@@ -1,0 +1,18 @@
+# /etc/systemd/system/tkx90-catd.service
+[Unit]
+Description=TK-x90 remote base CAT daemon (app_rpt + Hamlib)
+After=network.target
+Before=asterisk.service
+
+[Service]
+Type=simple
+User=asterisk
+Group=dialout
+RuntimeDirectory=tkx90
+RuntimeDirectoryMode=0755
+ExecStart=/usr/bin/python3 /usr/local/lib/tkx90/tkx90_catd.py -c /etc/tkx90/tkx90.toml -v
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
