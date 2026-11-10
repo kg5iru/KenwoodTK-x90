@@ -10,7 +10,8 @@ TK-790 or TK-890** as an **ASL3 remote base** with a CAT interface:
 | CAT daemon | [`host/tkx90_catd.py`](host/tkx90_catd.py), [`host/tkx90.toml`](host/tkx90.toml) | Emulates the Kenwood rig app_rpt supports, and serves the Hamlib rigctld protocol |
 | AllStarLink 3 config | [`asl3/`](asl3) | rpt.conf, simpleusb.conf, udev rule, systemd unit, installer |
 | Hamlib config | [`hamlib/README.md`](hamlib/README.md) | `rigctl -m 2` usage and the supported command set |
-| Tests | [`tests/`](tests) | Daemon (app_rpt wire format, pty, TCP) and firmware logic |
+| Virtual control head | [`hardware/VIRTUAL_HEAD.md`](hardware/VIRTUAL_HEAD.md), [`host/vch.py`](host/vch.py), [`firmware/headbus.py`](firmware/headbus.py), [`firmware/vch_bridge.py`](firmware/vch_bridge.py) | Browser front panel laid out like a KCH-11. It works with the DB-25 board alone, or with the head bus tapped or bridged |
+| Tests | [`tests/`](tests) | Daemon (app_rpt wire format, pty, TCP), firmware logic, head-bus engine, virtual head |
 
 ## The key constraint: the TK-x90 has no CAT port
 
@@ -79,6 +80,7 @@ tuning.
    1–15 (see *Radio preparation* and *KPG-44D programming* in the hardware
    doc).
 3. **Flash the Pico.** Install MicroPython for the Pico, then
+   `mpremote cp firmware/headbus.py :headbus.py`,
    `mpremote cp firmware/main.py :main.py` and `mpremote reset`.
 4. **Install the daemon** on the ASL3 node:
    ```sh
@@ -175,13 +177,36 @@ The board already has hooks for research into both possible routes:
    per QSY, EEPROM wear, and the risk inherent in programming mode. This
    would fit in `tkx90_catd.py` as another backend behind `Radio.select()`.
 2. **Head-bus or TXD2/RXD2 commands.** The notebook reports that
-   replaying head-bus TRD messages changes group/channel. The Pico can
-   sniff TRD (`TRD ON`, J3) and bridge the undocumented DB-25 serial port
-   (`U2 ON`, `U2W <hex>`) for reverse engineering. Neither of these gives
+   replaying head-bus TRD messages changes group/channel. The virtual
+   control head (below) has the tooling for this: the J3 tap and the
+   inline bridge capture and replay TRD traffic. The Pico can also
+   bridge the undocumented DB-25 serial port (`U2 ON`, `U2W <hex>`). Neither of these gives
    VFO tuning on stock firmware, but they could replace the 15-channel
    limit with group+channel selection.
 3. **Firmware modification** of the M16C (M30625FGAGP), as described in
    the notebook. This is the only route to a real VFO and CAT command set.
+
+## Virtual control head
+
+`tkx90-catd` can also serve a browser front panel for the radio at
+`http://<node>:8073/`. Set `[vch] enabled = true` in `tkx90.toml`. The
+panel has the KCH-11 layout: LCD, TX/BUSY LEDs, channel knob, GR ◀ ▶,
+MON, SCN, SP, PF1–PF9 and POWER. It runs at one of three levels:
+
+1. **DB-25 only** (works with the interface board as built): the knob
+   steps through the Remote Channels, the LEDs and S-meter come from
+   TXS, SQ and RSSI, and SP mutes the speaker.
+2. **Head-bus tap**: J3 is connected to the front 12-pin connector. The
+   real head stays on, and the panel mirrors its display and presses
+   its keys using frames learned from your radio.
+3. **Inline bridge**: a second Pico sits on the W501 head cable. Frames
+   have a known direction, POWER works, and the radio can run with the
+   head removed. A relay bypasses the bridge whenever it isn't running.
+
+The radio-to-head protocol is undocumented, so levels 2 and 3 run from
+a codebook you learn with `vch.py` (a guided, key-by-key procedure).
+Details, schematics and limits are in
+[`hardware/VIRTUAL_HEAD.md`](hardware/VIRTUAL_HEAD.md).
 
 ## Tests
 

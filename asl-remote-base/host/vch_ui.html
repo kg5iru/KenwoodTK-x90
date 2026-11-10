@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TK-x90 Control Head</title>
+<style>
+  :root {
+    --bg: #e9ebee;
+    --text: #1d2126;
+    --muted: #5d6670;
+    --panel: #24272b;
+    --panel-edge: #0f1113;
+    --key: #3a3f45;
+    --key-hi: #4b525a;
+    --key-text: #e8eaed;
+    --lcd: #b8c79a;
+    --lcd-ink: #1f2a12;
+    --lcd-ghost: rgba(31, 42, 18, 0.08);
+    --red: #e5483f;
+    --green: #3ec46d;
+    --amber: #f0b429;
+    --card: #ffffff;
+    --border: #d4d8dd;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #121417;
+      --text: #e6e8eb;
+      --muted: #9aa3ad;
+      --card: #1b1e22;
+      --border: #2c3137;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #121417; --text: #e6e8eb; --muted: #9aa3ad; --card: #1b1e22; --border: #2c3137;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 15px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  main { max-width: 920px; margin: 0 auto; padding: 20px 16px 40px; }
+  header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  h1 { font-size: 18px; margin: 0; font-weight: 600; }
+  .badge { font-size: 12px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--muted); }
+  .badge.off { color: var(--red); border-color: var(--red); }
+
+  .head {
+    background: linear-gradient(180deg, #2c3035, var(--panel));
+    border: 2px solid var(--panel-edge); border-radius: 18px;
+    padding: 18px; color: var(--key-text);
+    display: grid; grid-template-columns: auto 1fr auto; gap: 18px; align-items: center;
+    box-shadow: 0 8px 24px rgba(0,0,0,.25);
+  }
+  .left { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+  .leds { display: flex; gap: 10px; font-size: 11px; color: #aab0b7; }
+  .led { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .led i { width: 14px; height: 14px; border-radius: 50%; background: #3b3f44; box-shadow: inset 0 1px 2px rgba(0,0,0,.6); }
+  .led.tx.on i { background: var(--red); box-shadow: 0 0 10px var(--red); }
+  .led.busy.on i { background: var(--green); box-shadow: 0 0 10px var(--green); }
+
+  .lcd {
+    background: var(--lcd); color: var(--lcd-ink); border-radius: 8px;
+    padding: 10px 14px; border: 3px solid #121416; min-width: 0;
+    box-shadow: inset 0 2px 6px rgba(0,0,0,.35);
+  }
+  .lcd .icons { display: flex; gap: 8px; font: 600 11px/1 ui-monospace, monospace; letter-spacing: .5px; min-height: 13px; }
+  .lcd .icons span { opacity: .15; }
+  .lcd .icons span.on { opacity: 1; }
+  .lcd .row { display: flex; align-items: baseline; gap: 14px; margin-top: 6px; }
+  .lcd .sub, .lcd .main {
+    font-family: "DejaVu Sans Mono", ui-monospace, Menlo, Consolas, monospace;
+    font-weight: 700; white-space: pre; position: relative;
+  }
+  .lcd .sub { font-size: 28px; }
+  .lcd .main { font-size: clamp(18px, 3.4vw, 30px); letter-spacing: 1px; overflow: hidden; }
+  .lcd .main::before, .lcd .sub::before {
+    content: attr(data-ghost); position: absolute; left: 0; top: 0; color: var(--lcd-ghost);
+  }
+  .lcd .info { font: 12px/1.3 ui-monospace, monospace; margin-top: 6px; opacity: .8; min-height: 16px; }
+
+  .meter { height: 6px; background: rgba(31,42,18,.15); border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  .meter b { display: block; height: 100%; width: 0; background: var(--lcd-ink); transition: width .2s; }
+
+  .right { display: flex; flex-direction: column; gap: 10px; align-items: center; }
+  .knob {
+    width: 88px; height: 88px; border-radius: 50%;
+    background: radial-gradient(circle at 35% 30%, #5a6068, #24282c 70%);
+    border: 2px solid #0e1012; position: relative; cursor: grab; touch-action: none;
+  }
+  .knob::after { content: ""; position: absolute; width: 4px; height: 18px; background: #c9ced4; left: 42px; top: 8px; border-radius: 2px; transform-origin: 2px 36px; transform: rotate(var(--rot, 0deg)); }
+  .knobbtns { display: flex; gap: 6px; }
+
+  button.k {
+    background: var(--key); color: var(--key-text); border: 1px solid #15181b;
+    border-radius: 7px; padding: 9px 0; min-width: 54px; font: 600 12px/1 system-ui, sans-serif;
+    box-shadow: 0 2px 0 #121417; cursor: pointer; transition: transform .05s;
+  }
+  button.k:hover { background: var(--key-hi); }
+  button.k:active { transform: translateY(2px); box-shadow: none; }
+  button.k.learned { border-color: #6c7a52; }
+  button.k.unavail { opacity: .45; }
+  button.k.pwr { background: #5a2420; min-width: 64px; }
+  button.k.on { outline: 2px solid var(--amber); }
+  button.k:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+  .keys { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(58px, 1fr)); gap: 8px; }
+
+  .cards { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 16px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px; min-width: 0; }
+  .card h2 { font-size: 13px; margin: 0 0 10px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
+  .chlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+  .chlist button {
+    text-align: left; background: transparent; color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 9px; font: 13px/1.2 system-ui, sans-serif; cursor: pointer;
+  }
+  .chlist button.cur { border-color: var(--green); box-shadow: inset 3px 0 0 var(--green); }
+  .chlist small { color: var(--muted); }
+  dl { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0; font-size: 14px; }
+  dt { color: var(--muted); }
+  dd { margin: 0; font-variant-numeric: tabular-nums; }
+  #toast { position: fixed; left: 50%; bottom: 18px; transform: translateX(-50%); background: #2a2e33; color: #fff; padding: 8px 14px; border-radius: 8px; font-size: 13px; opacity: 0; transition: opacity .2s; pointer-events: none; max-width: calc(100% - 32px); }
+  #toast.show { opacity: 1; }
+
+  @media (max-width: 640px) {
+    .head { grid-template-columns: 1fr; }
+    .left { flex-direction: row; justify-content: space-between; width: 100%; }
+    .right { flex-direction: row; justify-content: center; }
+    .cards { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>TK-x90 virtual control head</h1>
+    <span class="badge" id="level">connecting…</span>
+    <span class="badge" id="online">controller</span>
+  </header>
+
+  <section class="head" aria-label="Control head">
+    <div class="left">
+      <button class="k pwr" data-key="POWER" title="POWER (inline bridge only)">POWER</button>
+      <div class="leds">
+        <div class="led tx" id="ledtx"><i></i>TX</div>
+        <div class="led busy" id="ledbusy"><i></i>BUSY</div>
+      </div>
+    </div>
+
+    <div class="lcd" aria-live="polite">
+      <div class="icons">
+        <span id="i-mon">MON</span><span id="i-scn">SCN</span><span id="i-sp">SP</span>
+        <span id="i-ct">T</span><span id="i-tsq">TSQ</span>
+      </div>
+      <div class="row">
+        <div class="sub" id="sub" data-ghost="888">   </div>
+        <div class="main" id="main" data-ghost="88888888888888">              </div>
+      </div>
+      <div class="meter" title="Signal strength"><b id="meter"></b></div>
+      <div class="info" id="info"></div>
+    </div>
+
+    <div class="right">
+      <div class="knob" id="knob" title="Channel: drag, scroll or use the buttons" tabindex="0" role="slider" aria-label="Channel"></div>
+      <div class="knobbtns">
+        <button class="k" data-key="CH_DN" aria-label="Channel down">CH ▼</button>
+        <button class="k" data-key="CH_UP" aria-label="Channel up">CH ▲</button>
+      </div>
+    </div>
+
+    <div class="keys" id="keys">
+      <button class="k" data-key="GR_DN">GR ◀</button>
+      <button class="k" data-key="GR_UP">GR ▶</button>
+      <button class="k" data-key="MON">MON</button>
+      <button class="k" data-key="SCN">SCN</button>
+      <button class="k" data-key="SP">SP</button>
+      <button class="k" data-key="PF1">PF1</button>
+      <button class="k" data-key="PF2">PF2</button>
+      <button class="k" data-key="PF3">PF3</button>
+      <button class="k" data-key="PF4">PF4</button>
+      <button class="k" data-key="PF5">PF5</button>
+      <button class="k" data-key="PF6">PF6</button>
+      <button class="k" data-key="PF7">PF7</button>
+      <button class="k" data-key="PF8">PF8</button>
+      <button class="k" data-key="PF9">PF9</button>
+    </div>
+  </section>
+
+  <div class="cards">
+    <section class="card">
+      <h2>Remote channels</h2>
+      <div class="chlist" id="chlist"></div>
+    </section>
+    <section class="card">
+      <h2>Status</h2>
+      <dl>
+        <dt>RX</dt><dd id="d-rx">–</dd>
+        <dt>TX</dt><dd id="d-tx">–</dd>
+        <dt>Tones</dt><dd id="d-tone">–</dd>
+        <dt>Signal</dt><dd id="d-rssi">–</dd>
+        <dt>Head bus</dt><dd id="d-hb">–</dd>
+      </dl>
+    </section>
+  </div>
+</main>
+<div id="toast" role="status"></div>
+
+<script>
+const token = new URLSearchParams(location.search).get("token");
+const q = token ? "?token=" + encodeURIComponent(token) : "";
+const $ = id => document.getElementById(id);
+const LEVELS = {1: "Level 1 · DB-25 only", 2: "Level 2 · head-bus tap", 3: "Level 3 · inline bridge"};
+const ALWAYS = new Set(["SP", "CH_UP", "CH_DN"]);
+let state = null, rot = 0;
+
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.classList.add("show");
+  clearTimeout(toast.t); toast.t = setTimeout(() => t.classList.remove("show"), 2200);
+}
+
+async function post(path, body) {
+  try {
+    const r = await fetch("/api/" + path + q, {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+    const j = await r.json();
+    if (!j.ok) toast(j.msg || "refused");
+  } catch (e) { toast("controller unreachable"); }
+}
+
+function press(key) {
+  post("key", {key});
+  if (key === "CH_UP" || key === "CH_DN") { rot += key === "CH_UP" ? 30 : -30; $("knob").style.setProperty("--rot", rot + "deg"); }
+}
+
+document.querySelectorAll("button.k").forEach(b => b.addEventListener("click", () => press(b.dataset.key)));
+
+// Channel knob: wheel, drag, arrow keys
+const knob = $("knob");
+knob.addEventListener("wheel", e => { e.preventDefault(); press(e.deltaY < 0 ? "CH_UP" : "CH_DN"); }, {passive: false});
+knob.addEventListener("keydown", e => {
+  if (e.key === "ArrowUp" || e.key === "ArrowRight") { e.preventDefault(); press("CH_UP"); }
+  if (e.key === "ArrowDown" || e.key === "ArrowLeft") { e.preventDefault(); press("CH_DN"); }
+});
+let dragY = null;
+knob.addEventListener("pointerdown", e => { dragY = e.clientY; knob.setPointerCapture(e.pointerId); });
+knob.addEventListener("pointermove", e => {
+  if (dragY === null) return;
+  const d = dragY - e.clientY;
+  if (Math.abs(d) > 24) { press(d > 0 ? "CH_UP" : "CH_DN"); dragY = e.clientY; }
+});
+knob.addEventListener("pointerup", () => { dragY = null; });
+
+function pad(s, n) { s = s || ""; return (s + " ".repeat(n)).slice(0, n); }
+
+function render(s) {
+  state = s;
+  $("level").textContent = LEVELS[s.level] || s.mode;
+  $("online").textContent = s.online ? "controller online" : "controller offline";
+  $("online").classList.toggle("off", !s.online);
+  $("main").textContent = pad(s.main, 14);
+  $("sub").textContent = (("   " + (s.sub || "")).slice(-3));
+  $("ledtx").classList.toggle("on", s.tx);
+  $("ledbusy").classList.toggle("on", s.busy);
+  $("i-sp").classList.toggle("on", s.spk_mute);
+  $("i-ct").classList.toggle("on", !!s.tx_tone);
+  $("i-tsq").classList.toggle("on", !!s.rx_tone);
+  const db = s.rssi_dbm;
+  $("meter").style.width = db == null ? "0" : Math.max(0, Math.min(100, (db + 125) * 2.5)) + "%";
+  $("info").textContent = s.rx_mhz ? s.rx_mhz.toFixed(4) + " MHz" + (s.tx_mhz && s.tx_mhz !== s.rx_mhz ? "  TX " + s.tx_mhz.toFixed(4) : "") : "";
+  $("d-rx").textContent = s.rx_mhz ? s.rx_mhz.toFixed(5) + " MHz" : "–";
+  $("d-tx").textContent = s.tx_mhz ? s.tx_mhz.toFixed(5) + " MHz" : "–";
+  $("d-tone").textContent = (s.tx_tone ? "T " + s.tx_tone.toFixed(1) : "no TX tone") + " · " + (s.rx_tone ? "TSQ " + s.rx_tone.toFixed(1) : "carrier squelch");
+  $("d-rssi").textContent = db == null ? "–" : db + " dBm";
+  $("d-hb").textContent = s.level > 1 ? s.frames + " frames · " + s.learned_keys.length + " keys learned" : "not used";
+  const learned = new Set(s.learned_keys);
+  document.querySelectorAll("button.k").forEach(b => {
+    const k = b.dataset.key;
+    const ok = k === "POWER" ? s.power_ok : (ALWAYS.has(k) || (s.level > 1 && learned.has(k)));
+    b.classList.toggle("unavail", !ok);
+    b.classList.toggle("learned", learned.has(k));
+    b.title = ok ? k : k + ": not available at this level / not learned";
+  });
+  $("keys").querySelector('[data-key="SP"]').classList.toggle("on", s.spk_mute);
+  const list = $("chlist");
+  if (list.childElementCount !== s.plan.length) {
+    list.innerHTML = "";
+    for (const c of s.plan) {
+      const b = document.createElement("button");
+      b.dataset.n = c.n;
+      b.innerHTML = "<small>" + c.n + "</small> ";
+      b.append(c.name);
+      b.addEventListener("click", () => post("channel", {n: c.n}));
+      list.append(b);
+    }
+  }
+  list.querySelectorAll("button").forEach(b => b.classList.toggle("cur", +b.dataset.n === s.channel));
+}
+
+function connect() {
+  const es = new EventSource("/api/events" + q);
+  es.onmessage = e => render(JSON.parse(e.data));
+  es.onerror = () => { $("level").textContent = "reconnecting…"; };
+}
+fetch("/api/state" + q).then(r => r.json()).then(render).catch(() => {});
+connect();
+</script>
+</body>
+</html>

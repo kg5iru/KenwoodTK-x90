@@ -1,5 +1,11 @@
 # /etc/udev/rules.d/99-tkx90.rules
-# Stable name for the Pico running the TKX90CTL MicroPython firmware.
-# MicroPython on RP2040 enumerates as 2e8a:0005.  If you run other Picos
-# on the same host, add ATTRS{serial}=="<your board's serial>".
+# Stable names for the Picos running the TKX90 MicroPython firmware.
+#
+# One Pico (DB-25 controller only): the active rule below is enough.
 SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="0005", SYMLINK+="tkx90ctl", GROUP="dialout", MODE="0660"
+#
+# Two Picos (controller + virtual-head bridge): both enumerate as
+# 2e8a:0005, so comment out the rule above and tell them apart by serial:
+#   udevadm info -q property -n /dev/ttyACM0 | grep ID_SERIAL_SHORT
+#SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="0005", ATTRS{serial}=="CONTROLLER_SERIAL", SYMLINK+="tkx90ctl", GROUP="dialout", MODE="0660"
+#SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="0005", ATTRS{serial}=="BRIDGE_SERIAL", SYMLINK+="tkx90vch", GROUP="dialout", MODE="0660"

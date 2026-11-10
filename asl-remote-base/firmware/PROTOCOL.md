@@ -16,12 +16,13 @@ must accept them at any time.
 | `MM 0/1` | `MM b` | Mic mute (DB25-12 MCM pulled low when 1). With `mm_on_tx=1` (the default) the mic is also muted automatically whenever the Pico keys the radio. |
 | `SM 0/1` | `SM b` | Speaker mute (DB25-24 SPM pulled low when 1). |
 | `CFG` / `CFG?` | `CFG k=v ...` | Show configuration. |
-| `CFG k=v [k=v ...]` | `CFG OK` | Change settings in RAM (`ch_invert`, `settle_ms`, `tot_s`, `boot_ch`, `cos_gate`, `cos_gate_tx`, `mm_on_tx`, `u2_baud`, `trd_baud`, `wdt_ms`). |
+| `CFG k=v [k=v ...]` | `CFG OK` | Change settings in RAM (`ch_invert`, `settle_ms`, `tot_s`, `boot_ch`, `cos_gate`, `cos_gate_tx`, `mm_on_tx`, `u2_baud`, `trd_baud`, `hb_gap_ms`, `wdt_ms`). |
 | `SAVE` | `SAVE OK` | Write the configuration to flash (`cfg.json`). |
 | `U2 ON/OFF` | `U2 OK` | Turn forwarding of bytes received on DB25-9 TXD2 on or off (sent as `U2R <hex>`). |
 | `U2 BAUD n` | `U2 OK` | Set the TXD2/RXD2 baud rate. |
 | `U2W <hex>` | `U2W OK` | Send raw bytes to the radio's RXD2 (DB25-10). |
-| `TRD ON/OFF` | `TRD OK` | Sniff the head-bus TRD line (optional J3) and report it as `TRD <hex>`. Receive only. |
+| `HB TAP` / `HB OFF` | `HB TAP` / `HB OFF` | Start or stop the head-bus tap on J3 (virtual control head, Level 2). `TRD ON/OFF` are aliases. |
+| `HBTX <D\|H> <hex>` | `HBTX OK` / `ERR HB` | Queue a frame for the head bus. It is sent after the bus has been idle for `lbt` ms, checked against its own echo, and retried on collision. The direction is ignored in tap mode. |
 | `RESET` | `RESET OK` | Reboot the Pico. |
 | anything else | `ERR CMD` | |
 | bad argument | `ERR ARG` | |
@@ -30,6 +31,11 @@ Unsolicited events:
 
 * `EV TOT`: the transmit time-out timer tripped. PTT stays dropped
   until the URI releases its PTT.
+* `HB <kind> <src> <t> <hex>`: head-bus frame. `kind` is `rx` (heard on
+  the bus), `tx` (our injected frame went out intact), `coll` (it
+  collided and will be retried), `drop` (gave up) or `auto` (bridge
+  auto-responder answered). `src` is `D` (radio), `H` (head) or `?`
+  (tap: unknown). `t` is the controller clock in ms (24-bit, wraps).
 
 ## Channel-select encoding
 
@@ -43,3 +49,23 @@ all four lines "H or Open" the panel selects the channel. It does not say
 which level is active. Bench-check this on your radio (see the
 commissioning steps in `../README.md`). If the levels turn out to be
 inverted, set `CFG ch_invert=15` and `SAVE`.
+
+## VCH bridge firmware (`vch_bridge.py`)
+
+The inline bridge Pico (virtual control head, Level 3) uses the same line
+format and the same `HB ...` events, with `src` always `D` or `H`.
+
+| Command | Reply | Meaning |
+|---|---|---|
+| `ID` | `ID TKX90VCH 1.0` | Identify. |
+| `HB BYPASS` / `HB OFF` | `HB BYPASS` | Relay K1 off: radio and head joined directly (the boot state). |
+| `HB BRIDGE` | `HB BRIDGE` | K1 on: TRD split, the Pico forwards both ways and reports frames. |
+| `HB HEADLESS` | `HB HEADLESS` | K1 on, head side ignored, auto-responder active. |
+| `HBTX D <hex>` | `HBTX OK` | Send to the radio as if from the head. |
+| `HBTX H <hex>` | `HBTX OK` | Send to the head as if from the radio. |
+| `AR ADD <match> <reply>` | `AR n` | In headless mode, answer radio frames that start with `match` with `reply`. |
+| `AR CLR` | `AR 0` | Clear the auto-responder table. |
+| `PWR [ms]` | `PWR OK` | Pull PS to ground for `ms` (default 300): press POWER. |
+| `ST` | `VST mode=.. sb=b rst=b ps=b coll=n` | Status: radio on (SB), reset active, POWER being pressed, collision count. |
+
+Events: `EV SB 0/1` (radio switched off/on), `EV RST 0/1`.

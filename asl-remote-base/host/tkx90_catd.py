@@ -259,6 +259,7 @@ class SimBackend:
         self.status = Status(online=True)
         self.lock = threading.Lock()
         self.on_reconnect = None
+        self.listeners: list = []
 
     def start(self):
         pass
@@ -277,15 +278,20 @@ class SimBackend:
             return dataclasses.replace(self.status)
 
     def command(self, line: str) -> str:
+        if line.startswith(("SM ", "MM ")):
+            return line
         return "ERR CMD"
 
 
 class PicoBackend:
     """Talks to the TKX90CTL firmware over USB CDC."""
 
-    def __init__(self, device: str, poll_s: float = 0.25, timeout_s: float = 1.0):
+    def __init__(self, device: str, poll_s: float = 0.25, timeout_s: float = 1.0,
+                 poll_cmd: str | None = "ST"):
         self.device = device
         self.poll_s = poll_s
+        self.poll_cmd = poll_cmd
+        self.listeners: list = []             # callback(line) for HB/EV lines
         self.timeout_s = timeout_s
         self.fd: int | None = None
         self.lock = threading.Lock()          # serialises commands
@@ -356,8 +362,14 @@ class PicoBackend:
                     self._dispatch(line)
 
     def _dispatch(self, line: str):
+        if line.startswith("HB ") and line.split()[1] in ("rx", "tx", "coll", "drop", "auto"):
+            for cb in self.listeners:
+                cb(line)
+            return
         if line.startswith(("EV ", "U2R ", "TRD ")):
             log.info("controller: %s", line)
+            for cb in self.listeners:
+                cb(line)
             return
         if line.startswith("ID ") and self.replies.empty() and not self.lock.locked():
             log.info("controller says %s", line)
@@ -376,9 +388,9 @@ class PicoBackend:
 
     def _poller(self):
         while not self.stop_evt.is_set():
-            if self.fd is not None:
+            if self.fd is not None and self.poll_cmd:
                 try:
-                    self._parse_status(self.command("ST"))
+                    self._parse_status(self.command(self.poll_cmd))
                 except BackendError as e:
                     log.debug("status poll failed: %s", e)
             time.sleep(self.poll_s)
@@ -1059,6 +1071,11 @@ def main(argv=None):
         threading.Thread(target=server.serve_forever, daemon=True).start()
         log.info("rigctld protocol on %s:%d", *addr)
 
+    vch_parts = []
+    if cfg.get("vch", {}).get("enabled", False):
+        import vch
+        vch_parts = vch.start_from_config(cfg, radio, backend)
+
     backend.start()
     if isinstance(backend, SimBackend):
         radio._reapply(backend)
@@ -1070,6 +1087,8 @@ def main(argv=None):
 
     if server:
         server.shutdown()
+    for part in vch_parts:
+        part.stop()
     if pty:
         pty.stop()
     backend.stop()

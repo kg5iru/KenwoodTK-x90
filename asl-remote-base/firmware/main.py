@@ -12,7 +12,8 @@
 #   * SQ, TXS, AO1..AO4          -> status inputs
 #   * RSI                        -> RSSI (ADC)
 #   * TXD2/RXD2                  -> second serial port (research bridge)
-#   * TRD (12-pin head bus)      -> optional sniffer (research only)
+#   * TRD (12-pin head bus)      -> virtual control head, tap mode
+#                                   (headbus.py, optional J3)
 #
 # The host talks to it over USB CDC with a line-oriented ASCII protocol.
 # See ../firmware/PROTOCOL.md.
@@ -55,8 +56,9 @@ DEFAULTS = {
     "cos_gate_tx": 1,
     # Baud rate for the TXD2/RXD2 bridge.
     "u2_baud": 9600,
-    # Baud rate for the TRD head-bus sniffer.
+    # Head bus (TRD): baud rate and inter-frame gap in ms.
     "trd_baud": 9600,
+    "hb_gap_ms": 4,
     # Mute the front-panel microphone (MCM) whenever the Pico keys the
     # radio, so cab/shack noise does not ride along on remote-base TX.
     "mm_on_tx": 1,
@@ -80,8 +82,8 @@ PIN_SQ = 10        # <- D  <- DB25-23 SQ  (low = busy)
 PIN_TXS = 11       # <- D  <- DB25-11 TXS (high = TX)
 PIN_AO = (12, 13, 14, 15)  # <- D <- DB25-20,8,21,22 AO1..AO4
 PIN_COS_OUT = 16   # -> Q8 -> URI COS (open drain, active low)
-PIN_TRD_RX = 17    # <- level shifter <- 12-pin head connector pin 6 TRD
-PIN_TRD_TX = 20    # UART1 TX placeholder (not connected on the board)
+PIN_TRD_RX = 17    # <- R7/R8 divider <- J3 TRD (12-pin connector pin 6)
+PIN_TRD_TX = 20    # UART1 TX, inverted -> Q10 open drain -> J3 TRD
 PIN_LED = 25
 ADC_RSSI = 0       # GP26 <- DB25-1 RSI
 
@@ -112,6 +114,7 @@ class Controller:
         self.u2 = None
         self.u2_mon = False
         self.trd = None
+        self.hb = None
 
         self.channel = 0
         self.settle_until = 0
@@ -186,8 +189,12 @@ class Controller:
                        tx=Pin(PIN_U2_TX), rx=Pin(PIN_U2_RX))
 
     def trd_open(self):
+        import headbus
+        # Inverted TX: UART idle (mark) = gate low = TRD released.
         self.trd = UART(1, baudrate=self.cfg["trd_baud"],
-                        tx=Pin(PIN_TRD_TX), rx=Pin(PIN_TRD_RX))
+                        tx=Pin(PIN_TRD_TX), rx=Pin(PIN_TRD_RX),
+                        invert=UART.INV_TX)
+        self.hb = headbus.Tap(self.trd, gap_ms=self.cfg["hb_gap_ms"])
 
     # -- periodic work -------------------------------------------------------------
     def tick(self):
@@ -222,10 +229,11 @@ class Controller:
             data = self.u2.read()
             if data:
                 self.reply("U2R " + binascii.hexlify(data).decode())
-        if self.trd is not None and self.trd.any():
-            data = self.trd.read()
-            if data:
-                self.reply("TRD " + binascii.hexlify(data).decode())
+        if self.hb is not None:
+            for kind, src, frame in self.hb.service(self.now()):
+                self.reply("HB %s %s %d %s" % (
+                    kind, src, self.now() & 0xFFFFFF,
+                    binascii.hexlify(frame).decode()))
 
         # Heartbeat LED: slow blink idle, solid while transmitting.
         if key:
@@ -316,14 +324,24 @@ class Controller:
                     self.u2_open()
                 self.u2.write(binascii.unhexlify(args[0]))
                 self.reply("U2W OK")
-            elif cmd == "TRD":
-                if args[0].upper() == "ON":
+            elif cmd in ("HB", "TRD"):
+                # HB TAP | HB OFF   (TRD ON/OFF kept as aliases)
+                if args[0].upper() in ("TAP", "ON"):
                     self.trd_open()
+                    self.reply("HB TAP")
                 else:
                     if self.trd is not None:
                         self.trd.deinit()
                     self.trd = None
-                self.reply("TRD OK")
+                    self.hb = None
+                    self.reply("HB OFF")
+            elif cmd == "HBTX":
+                # HBTX <D|H> <hex>  (direction is ignored in tap mode)
+                if self.hb is None:
+                    self.reply("ERR HB")
+                else:
+                    self.hb.send(args[0].upper(), binascii.unhexlify(args[1]))
+                    self.reply("HBTX OK")
             elif cmd == "RESET":
                 self.reply("RESET OK")
                 import machine
@@ -349,7 +367,7 @@ def main():
         ctl.tick()
         if wdt:
             wdt.feed()
-        time.sleep_ms(2)
+        time.sleep_ms(1)
 
 
 if __name__ == "__main__":

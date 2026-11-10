@@ -39,11 +39,20 @@ class FakeADC:
 
 
 class FakeUART:
+    INV_TX = 2
+
     def __init__(self, *a, **k):
         self.tx = b""
+        self.rx = bytearray()
+        self.kw = k
 
     def any(self):
-        return 0
+        return len(self.rx)
+
+    def read(self, n=None):
+        d = bytes(self.rx)
+        self.rx = bytearray()
+        return d
 
     def write(self, b):
         self.tx += b
@@ -156,6 +165,23 @@ class FirmwareTests(unittest.TestCase):
         self.assertEqual(self.cmd("U2W 0102ff"), "U2W OK")
         self.assertEqual(self.ctl.u2.tx, b"\x01\x02\xff")
 
+    def test_headbus_tap(self):
+        self.assertEqual(self.cmd("HBTX D 01"), "ERR HB")
+        self.assertEqual(self.cmd("HB TAP"), "HB TAP")
+        self.assertEqual(self.ctl.trd.kw.get("invert"), FakeUART.INV_TX)
+        self.ctl.trd.rx.extend(b"\x12\x34")
+        Clock.t = 100
+        self.ctl.tick()
+        Clock.t = 110
+        self.out.seek(0); self.out.truncate()
+        self.ctl.tick()
+        self.assertIn("HB rx ? 110 1234", self.out.getvalue())
+        self.assertEqual(self.cmd("HBTX D abcd"), "HBTX OK")
+        Clock.t = 200
+        self.ctl.tick()
+        self.assertEqual(self.ctl.trd.tx, b"\xab\xcd")
+        self.assertEqual(self.cmd("HB OFF"), "HB OFF")
+
     def test_bad(self):
         self.assertEqual(self.cmd("FOO"), "ERR CMD")
         self.assertEqual(self.cmd("CH x"), "ERR ARG")
@@ -163,3 +189,53 @@ class FirmwareTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class BridgeFirmwareTests(unittest.TestCase):
+    def setUp(self):
+        install_stubs()
+        sys.path.insert(0, FW)
+        sys.modules.pop("vch_bridge", None)
+        import vch_bridge
+        FakePin.pins.clear()
+        Clock.t = 0
+        self.out = io.StringIO()
+        self.ctl = vch_bridge.BridgeController(out=self.out)
+
+    def cmd(self, line):
+        self.out.seek(0)
+        self.out.truncate()
+        self.ctl.feed(line + "\r")
+        return self.out.getvalue().strip()
+
+    def test_modes_and_relay(self):
+        self.assertTrue(self.cmd("ID").startswith("ID TKX90VCH"))
+        self.assertEqual(FakePin.pins[10].value(), 0, "bypass relay off at boot")
+        self.assertEqual(self.cmd("HBTX D 01"), "ERR BYPASS")
+        self.assertEqual(self.cmd("HB BRIDGE"), "HB BRIDGE")
+        self.assertEqual(FakePin.pins[10].value(), 1)
+        self.assertEqual(self.cmd("HB HEADLESS"), "HB HEADLESS")
+        self.assertTrue(self.ctl.bridge.headless)
+        self.assertEqual(self.cmd("AR ADD 50 6061"), "AR 1")
+        self.assertEqual(self.cmd("AR CLR"), "AR 0")
+        self.assertEqual(self.cmd("HB OFF"), "HB BYPASS")
+        self.assertEqual(FakePin.pins[10].value(), 0)
+
+    def test_power_pulse(self):
+        self.assertEqual(self.cmd("PWR 300"), "PWR OK")
+        self.assertEqual(FakePin.pins[6].value(), 1)
+        Clock.t = 200
+        self.ctl.tick()
+        self.assertEqual(FakePin.pins[6].value(), 1)
+        Clock.t = 301
+        self.ctl.tick()
+        self.assertEqual(FakePin.pins[6].value(), 0)
+
+    def test_forwarding(self):
+        self.cmd("HB BRIDGE")
+        self.ctl.deck_uart.rx.extend(b"\x77")
+        self.ctl.tick()
+        self.assertEqual(self.ctl.head_uart.tx, b"\x77")
+        Clock.t = 10
+        self.ctl.tick()
+        self.assertIn("HB rx D 10 77", self.out.getvalue())

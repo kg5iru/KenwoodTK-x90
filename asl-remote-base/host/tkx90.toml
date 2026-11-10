@@ -103,3 +103,18 @@ number = 6
 name = "APRS"
 rx_mhz = 144.390
 shift = "simplex"
+
+[vch]
+# Virtual control head web panel (see ../hardware/VIRTUAL_HEAD.md).
+enabled = false
+# "dbonly" : Level 1, DB-25 features only, no learning needed
+# "tap"    : Level 2, controller J3 on the head bus next to the real head
+# "bridge" : Level 3, inline bridge Pico on the W501 head cable
+mode = "dbonly"
+listen = "127.0.0.1"     # 0.0.0.0 to reach it from the LAN (set a token!)
+port = 8073
+token = ""               # if set, open http://node:8073/?token=...
+codebook = "/etc/tkx90/vch-codebook.json"
+bridge_device = "/dev/tkx90vch"
+headless = false         # bridge only: no head attached, use auto-responses
+allow_power = false      # bridge only: allow the panel's POWER key

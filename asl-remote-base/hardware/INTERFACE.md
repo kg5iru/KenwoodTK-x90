@@ -45,7 +45,8 @@ open the radio to set the DI/MI jumper (see "Radio preparation").
  │ 10 RXD2 ◄── Q9 (BSS138 level shifter) ◄── GP0 (UART0 TX)              │
  │  7,18 E ───────── GND                                                 │
  └───────────────────────────────────────────────────────────────────────┘
-   J3 (optional, research): 12-pin head connector pin 6 TRD ─R7/R8─► GP17
+   J3 (optional, virtual head): 12-pin connector pin 6 TRD ─R7/R8─► GP17
+                                                     ◄─ Q10 ◄─ GP20
 ```
 
 ## DB-25 accessory connector (radio side)
@@ -197,14 +198,16 @@ CM108-based URIs are), and its COS input active-low (use
 Map these to your URI (DMK URI, RA-40, AllScan UCI90, a modified CM108
 fob, ...) using its documentation.
 
-### J3, head-bus sniffer (optional)
+### J3, head-bus tap (optional, virtual control head)
 
 The control head and the radio talk on the single-wire TRD line (12-pin
-connector pin 6, 9600 baud, the same line used for programming). With a
-3D-printed front connector (see `../../microphone-connector`) you can
-tap TRD through R7 22 kΩ / R8 33 kΩ into GP17 (UART1 RX). `TRD ON` then
-streams the traffic. This input is receive-only, so the board can never
-drive the head bus.
+connector pin 6, 9600 baud, the same line used for programming). J3
+taps it through R7 22 kΩ / R8 33 kΩ into GP17 (UART1 RX) and drives it
+through Q10, an open-drain 2N7002 on GP20 (UART1 TX, inverted). This is
+Level 2 of the virtual control head. See [`VIRTUAL_HEAD.md`](VIRTUAL_HEAD.md)
+for the circuit, the firmware behaviour (listen before talk, echo check)
+and how to connect it through the front connector. If you leave Q10 off
+the board, the tap is receive-only and can never drive the head bus.
 
 ## BOM
 
@@ -214,7 +217,7 @@ drive the head bus.
 | 1 | J1 | DB-25 **male** solder-cup or right-angle PCB plug, with #4-40 jack screws |
 | 1 | J2 | 6-pin 2.54 mm header (to the URI) |
 | 1 | J3 | 2-pin header (optional TRD tap) |
-| 9 | Q1–Q9 | 2N7002 or BSS138, SOT-23 |
+| 10 | Q1–Q10 | 2N7002 or BSS138, SOT-23 (Q10 only for the J3 head-bus tap) |
 | 6 | D1–D6 | BAT54 (SOT-23) or 1N5817 |
 | 8 | – | 100 Ω gate resistors |
 | 8 | – | 100 kΩ gate pull-downs |
